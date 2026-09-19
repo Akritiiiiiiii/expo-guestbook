@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A guestbook nobody owns</title>
+<meta name="description" content="A guestbook stored on a public blockchain. Sign it from your phone and watch your message become permanent.">
+<meta name="theme-color" content="#E4E8EA">
+<meta property="og:type" content="website">
+<meta property="og:title" content="A guestbook nobody owns">
+<meta property="og:description" content="Sign a smart contract from your phone. Nobody can edit or delete what you write.">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<script src="config.js"></script>
+<script src="config.env.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page">
+
+  <div class="left">
+    <header class="head">
+      <h1><span>A guest&shy;book</span><span>nobody</span><span>owns.</span></h1>
+      <p class="lede">Every line on this wall is stored on a public blockchain, not on a server we run. Add yours and it will outlive this booth.</p>
+    </header>
+
+    <section class="explain" aria-label="How it works">
+      <h2>What happens when you sign</h2>
+      <ol class="steps">
+        <li><b>1</b><span>You write a short message. So far it exists only on your screen.</span></li>
+        <li><b>2</b><span>Your wallet signs it. That signature proves it came from you, with no password or account.</span></li>
+        <li><b>3</b><span>Thousands of independent computers check it and add it to the chain. After that, nobody can edit or delete it, including us.</span></li>
+      </ol>
+
+      <h2>This isn't about money</h2>
+      <p>Bitcoin showed that a network can agree on who owns what. Smart contracts go one step further: the network can run rules, too.</p>
+      <p>This wall is governed by a small program, not a company. Its rules: anyone may sign, messages have a size limit, and nothing can be changed afterward. The whole program is short enough to read.</p>
+
+      <details>
+        <summary>Read the contract</summary>
+        <pre><code>// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+/// @title Guestbook
+/// @notice Anyone can sign. Nobody can edit or delete a signature,
+///         including whoever deployed this contract.
+contract Guestbook {
+    struct Entry {
+        address signer;
+        string  name;
+        string  message;
+        uint64  timestamp;
+        uint64  blockNumber;
+    }
+
+    uint256 public constant MAX_NAME    = 32;   // bytes
+    uint256 public constant MAX_MESSAGE = 200;  // bytes
+
+    Entry[] private entries;
+
+    event Signed(uint256 indexed id, address indexed signer, string name, string message);
+
+    /// @notice Add a line to the guestbook.
+    function sign(string calldata name, string calldata message) external {
+        require(bytes(name).length &gt; 0 &amp;&amp; bytes(name).length &lt;= MAX_NAME, &quot;Name must be 1-32 bytes&quot;);
+        require(bytes(message).length &gt; 0 &amp;&amp; bytes(message).length &lt;= MAX_MESSAGE, &quot;Message must be 1-200 bytes&quot;);
+
+        entries.push(Entry(msg.sender, name, message, uint64(block.timestamp), uint64(block.number)));
+        emit Signed(entries.length, msg.sender, name, message);
+    }
+
+    /// @notice How many signatures exist.
+    function count() external view returns (uint256) {
+        return entries.length;
+    }
+
+    /// @notice Up to `n` entries, newest first.
+    function getLatest(uint256 n) external view returns (Entry[] memory latest) {
+        uint256 total = entries.length;
+        uint256 size  = n &lt; total ? n : total;
+        latest = new Entry[](size);
+        for (uint256 i = 0; i &lt; size; i++) {
+            latest[i] = entries[total - 1 - i];
+        }
+    }
+}</code></pre>
+      </details>
+      <details>
+        <summary>Under the hood</summary>
+        <dl>
+          <dt>Network</dt><dd id="uhNetwork">Sepolia test network</dd>
+          <dt>Contract</dt><dd id="uhAddress">Not set yet</dd>
+          <dt>You call</dt><dd class="mono">sign(name, message)</dd>
+          <dt>Cost</dt><dd>A small network fee, paid in free test ETH.</dd>
+        </dl>
+      </details>
+    </section>
+  </div>
+
+  <main class="wall">
+
+    <!-- shown when no contract address is configured -->
+    <section class="setup" id="setup" hidden>
+      <h2>Connect this page to your contract</h2>
+      <p>Deploy <span class="mono">Guestbook.sol</span> in Remix, copy the contract address from the Deployed Contracts panel, and paste it below. To make it permanent, set the <span class="mono">CONTRACT_ADDRESS</span> environment variable in Vercel and redeploy, or put it in <span class="mono">config.js</span>.</p>
+      <label for="addrInput">Contract address</label>
+      <input type="text" id="addrInput" placeholder="0x..." autocomplete="off" spellcheck="false">
+      <button class="go" id="addrSave" type="button">Use this contract</button>
+      <p class="status bad" id="addrErr" role="alert"></p>
+    </section>
+
+    <!-- the form -->
+    <section class="note" id="note" hidden aria-labelledby="noteTitle">
+      <h2 id="noteTitle">Add your line</h2>
+      <div class="field">
+        <label for="nameEl">Your name</label>
+        <input type="text" id="nameEl" placeholder="First name is fine" autocomplete="nickname" maxlength="60">
+      </div>
+      <div class="field">
+        <label for="msgEl">Your message</label>
+        <textarea id="msgEl" rows="3" placeholder="Say hi to whoever reads this next"></textarea>
+        <span class="counter" id="counter" aria-live="polite">0 / 200</span>
+      </div>
+      <button class="go" id="goBtn" type="button">Connect wallet to sign</button>
+      <p class="status" id="status" role="status" aria-live="polite"></p>
+      <p class="fine" id="walletLine">No wallet connected. You can read the wall without one.</p>
+      <p class="fine">This runs on a test network. Fees are paid in free test ETH, never real money.</p>
+    </section>
+
+    <div class="wall-head">
+      <h2>The wall</h2>
+      <p class="tally" id="tally">Loading from the blockchain</p>
+    </div>
+    <p class="chain-note" id="chainNote" role="status" hidden></p>
+
+    <ol class="chain" id="chain">
+      <li class="entry pending" id="pending" hidden>
+        <span class="idx" id="pendingIdx"></span>
+        <span class="knot"></span>
+        <div class="body">
+          <p class="pending-title">Your line is being added</p>
+          <ol id="pendingSteps">
+            <li>Approve in your wallet</li>
+            <li>Sent to the network <span id="txLink"></span></li>
+            <li>Sealed into a block</li>
+          </ol>
+        </div>
+      </li>
+      <li class="entry empty" id="empty" hidden>
+        <span class="idx">1</span>
+        <span class="knot"></span>
+        <div class="body"><p class="msg">Nothing here yet. Yours will be the first entry on the chain.</p></div>
+      </li>
+    </ol>
+  </main>
+</div>
+
+<noscript><p class="noscript">This page needs JavaScript to talk to the blockchain.</p></noscript>
+
+<script src="app.js"></script>
+</body>
+</html>

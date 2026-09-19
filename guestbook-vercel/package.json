@@ -1,0 +1,11 @@
+{
+  "name": "expo-guestbook",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A blockchain guestbook: Solidity contract plus a static front-end.",
+  "scripts": {
+    "build": "node build-config.mjs",
+    "dev": "npx serve public"
+  },
+  "engines": { "node": ">=18" }
+}
